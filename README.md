@@ -1,63 +1,95 @@
-# melbourne-housing-snapshot
-A data analytics project based on a dataset on housing in Melbourne
+# Melbourne Housing Price Prediction
 
-About Dataset  
-Context
-Melbourne real estate is BOOMING. Can you find the insight or predict the next big trend to become a real estate mogul… or even harder, to snap up a reasonably priced 2-bedroom unit?
+An end-to-end data analytics project: cleaning, exploratory analysis, feature engineering, and a regression model that predicts house prices in Melbourne, Australia.
 
 
-Content  
-This is a snapshot of a dataset created by Tony Pino.  
+## Dataset
 
+**Melbourne Housing Snapshot**
 
-It was scraped from publicly available results posted every week from Domain.com.au. He cleaned it well, and now it's up to you to make data analysis magic. The dataset includes Address, Type of Real estate, Suburb, Method of Selling, Rooms, Price, Real Estate Agent, Date of Sale and distance from C.B.D.  
+- Source (Kaggle): https://www.kaggle.com/datasets/dansbecker/melbourne-housing-snapshot
+- Original full dataset: https://www.kaggle.com/anthonypino/melbourne-housing-market
+- Snapshot created: September 2017
+- Rows without a `Price` value were removed from the snapshot
+- Target variable: `Price`
 
+### Columns
 
-Notes on Specific Variables  
-Rooms: Number of rooms  
+| Column | Description |
+|---|---|
+| `Address` | Property address |
+| `Type` | `h` – house/cottage/villa/semi/terrace, `u` – unit/duplex, `t` – townhouse, `dev site` – development site, `br` – bedroom(s), `o res` – other residential |
+| `Suburb` | Suburb name |
+| `Method` | Sale method: `S` – sold, `SP` – sold prior, `PI` – passed in, `PN` – sold prior not disclosed, `SN` – sold not disclosed, `NB` – no bid, `VB` – vendor bid, `W` – withdrawn prior to auction, `SA` – sold after auction, `SS` – sold after auction, price not disclosed |
+| `Rooms` | Number of rooms |
+| `Price` | Sale price, in dollars |
+| `SellerG` | Real estate agent |
+| `Date` | Date of sale |
+| `Distance` | Distance from CBD (Central Business District) |
+| `Regionname` | General region (e.g. Northern Metropolitan, Southern Metropolitan) |
+| `Propertycount` | Number of properties in the suburb |
+| `Bedroom2` | Number of bedrooms (scraped from a different source than `Rooms`) |
+| `Bathroom` | Number of bathrooms |
+| `Car` | Number of car spots |
+| `Landsize` | Land size |
+| `BuildingArea` | Building size |
+| `YearBuilt` | Year the property was built |
+| `CouncilArea` | Governing council for the area |
+| `Lattitude` / `Longtitude` | Geographic coordinates |
 
+## What was done
 
-Price: Price in dollars  
+1. **Loading** — read `melb_data.csv` into a DataFrame; verified shape and column types.
+2. **Initial overview** — checked missing values, data types, and descriptive statistics; found data quality issues (invalid `YearBuilt` values, `Date` stored as text).
+3. **Cleaning**
+   - Removed technical index columns, if present.
+   - Converted `Date` from text to a proper date type (day-first format).
+   - Treated `Landsize` / `BuildingArea` values of `0` as missing (a real property can't have zero area).
+   - Treated `YearBuilt` values below 1800 as missing (data entry errors, e.g. `1196`).
+   - Checked and removed duplicate rows.
+4. **Exploratory data analysis (EDA)**
+   - Distribution of `Price` (right-skewed; log10 transform is closer to symmetric).
+   - Price by dwelling type (`Type`).
+   - Correlation of numeric features with `Price`.
+   - Identified near-duplicate features (`Rooms` and `Bedroom2`, correlation 0.94).
+5. **Feature engineering**
+   - `sale_year`, `sale_month` — extracted from `Date`.
+   - `building_age` — age of the property at time of sale (`sale_year - YearBuilt`), with negative values treated as missing.
+   - `has_buildingarea`, `has_yearbuilt` — missingness flags.
+   - `suburb_freq` — frequency encoding for the high-cardinality `Suburb` column.
+   - Dropped `Bedroom2` (redundant with `Rooms`), plus raw text columns not used for modeling (`Address`, `SellerG`, `Suburb`, `Date`).
+6. **Modeling pipeline**
+   - Numeric features: median imputation.
+   - Categorical features (`Type`, `Method`, `Regionname`, `CouncilArea`): most-frequent imputation + one-hot encoding.
+   - All preprocessing steps combined into a single `scikit-learn` `Pipeline` / `ColumnTransformer` to prevent data leakage between train and test sets.
+   - 80/20 train/test split (`random_state=42`).
+7. **Models trained and evaluated on the test set**
+   - Baseline (`DummyRegressor`, predicts the mean price)
+   - Linear Regression
+   - Random Forest Regressor (200 trees)
 
+## Results
 
-Method: S - property sold; SP - property sold prior; PI - property passed in; PN - sold prior not disclosed; SN - sold not disclosed; NB - no bid; VB - vendor bid; W - withdrawn prior to auction; SA - sold after auction; SS - sold after auction price not disclosed. N/A - price or highest bid not available.  
+| Model | MAE | RMSE | R² |
+|---|---:|---:|---:|
+| Baseline (mean) | 461,258 | 630,259 | 0.00 |
+| Linear Regression | 256,130 | 372,664 | 0.65 |
+| **Random Forest** | **162,919** | **269,667** | **0.82** |
 
+*(MAE / RMSE in dollars.)*
 
-Type: br - bedroom(s); h - house,cottage,villa, semi,terrace; u - unit, duplex; t - townhouse; dev site - development site; o res - other residential.  
+**Top price drivers** (Random Forest feature importance): region (`Southern Metropolitan`), `Rooms`, `Distance` to CBD, dwelling type `unit`, `Landsize`.
 
+## Conclusions
 
-SellerG: Real Estate Agent  
+- Random Forest clearly outperforms both the baseline and Linear Regression, explaining about 82% of price variance versus 65% for a plain linear model.
+- Location matters most: region and distance to the CBD are among the strongest predictors, alongside the number of rooms and dwelling type.
+- Houses (`h`) sell for a substantially higher median price than townhouses (`t`) or units (`u`), consistent with the correlation and feature-importance results.
 
+## Ideas for improvement
 
-Date: Date sold  
+- Hyperparameter tuning for Random Forest (`GridSearchCV` / `RandomizedSearchCV`).
+- Try gradient boosting models (XGBoost, LightGBM, CatBoost).
+- Engineer geospatial features from `Lattitude` / `Longtitude` (e.g. distance to CBD center, location clustering).
+- Handle `Suburb` and `CouncilArea` with target/mean encoding instead of, or in addition to, frequency encoding.
 
-
-Distance: Distance from CBD  
-
-
-Regionname: General Region (West, North West, North, North east …etc)  
-
-
-Propertycount: Number of properties that exist in the suburb.  
-
-
-Bedroom2 : Scraped # of Bedrooms (from different source)  
-
-
-Bathroom: Number of Bathrooms  
-
-
-Car: Number of carspots  
-
-
-Landsize: Land Size  
-
-
-BuildingArea: Building Size  
-
-
-CouncilArea: Governing council for the area  
-
-
-Acknowledgements  
-This is intended as a static (unchanging) snapshot of https://www.kaggle.com/anthonypino/melbourne-housing-market. It was created in September 2017. Additionally, homes with no Price have been removed.  
